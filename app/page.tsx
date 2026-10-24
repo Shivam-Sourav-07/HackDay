@@ -15,11 +15,14 @@ type FormValues = {
   disability: string;
 };
 
+type SchemeNeed = "Education" | "Farming" | "Business" | "Disability support" | "Senior support" | "Skills & jobs" | "Financial support";
+
 type SchemeMatch = {
   badge: string;
   title: string;
   description: string;
   accent: "green" | "saffron" | "blue";
+  need: SchemeNeed;
 };
 
 type FieldName = keyof FormValues;
@@ -195,6 +198,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: isPriorityGroup ? "Strong profile match" : "Student match",
       title: "National Scholarship Portal opportunities",
       description: "You selected Student. Explore scholarships that match your course, marks, income, category and state; final eligibility is verified by the institution.",
+      need: "Education",
     });
   }
 
@@ -203,6 +207,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Delhi profile match",
       title: "Education Loan Scheme — Delhi",
       description: "Your Delhi, student, income and target-group details may fit this education-loan option. Confirm residence, admission and recognised-institute requirements.",
+      need: "Education",
     });
   }
 
@@ -211,6 +216,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Farmer profile match",
       title: "PM-KISAN",
       description: "You selected a farming profession. Check your land records and the scheme’s exclusion conditions before applying.",
+      need: "Farming",
     });
 
     if (age >= 18 && age <= 40) {
@@ -218,6 +224,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
         badge: "Farmer pension match",
         title: "Pradhan Mantri Kisan Maandhan Yojana",
         description: "This pension option may suit farmers aged 18–40. It requires small or marginal cultivable landholding and other verification.",
+        need: "Farming",
       });
     }
   }
@@ -227,6 +234,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Vendor profile match",
       title: "PM SVANidhi",
       description: "You selected a vendor profession. Check whether your vending activity and local-body certificate meet the current scheme requirements.",
+      need: "Business",
     });
   }
 
@@ -235,6 +243,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Business profile match",
       title: "Pradhan Mantri MUDRA Yojana",
       description: "You selected business or self-employment. This may support eligible non-corporate micro-enterprise activities through participating lenders.",
+      need: "Business",
     });
 
     if (profile.gender === "Female" || profile.caste === "SC" || profile.caste === "ST") {
@@ -242,6 +251,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
         badge: "Entrepreneur profile match",
         title: "Stand-Up India",
         description: "Women and SC/ST entrepreneurs may explore this option for eligible greenfield enterprises. Bank and business-plan checks apply.",
+        need: "Business",
       });
     }
   }
@@ -251,6 +261,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Disability support match",
       title: "ADIP Assistance Scheme",
       description: "You reported a disability. Explore assistance for aids and appliances; a disability certificate and other scheme conditions are checked at application time.",
+      need: "Disability support",
     });
   }
 
@@ -259,6 +270,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Senior citizen match",
       title: "National Social Assistance Programme",
       description: "Your age and income suggest checking old-age pension support. State and household eligibility verification is required.",
+      need: "Senior support",
     });
   }
 
@@ -267,6 +279,7 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Skills profile match",
       title: "Skill India / PMKVY",
       description: "You selected non-earning status. Explore job-linked training opportunities based on your age, location and available courses.",
+      need: "Skills & jobs",
     });
   }
 
@@ -275,11 +288,12 @@ function getSchemeMatches(profile: FormValues): SchemeMatch[] {
       badge: "Explore",
       title: "PM Jan Dhan Yojana",
       description: "Explore basic financial-inclusion support and check with a participating bank for current account and eligibility requirements.",
+      need: "Financial support",
     });
   }
 
   const accents: SchemeMatch["accent"][] = ["green", "saffron", "blue"];
-  return candidates.slice(0, 4).map((candidate, index) => ({
+  return candidates.map((candidate, index) => ({
     ...candidate,
     accent: accents[index % accents.length],
   }));
@@ -372,6 +386,7 @@ export default function Home() {
   const [voiceMessage, setVoiceMessage] = useState("Say an answer in English or Hindi. You can always edit it below.");
   const [transcript, setTranscript] = useState("");
   const [showResults, setShowResults] = useState(false);
+  const [selectedNeed, setSelectedNeed] = useState<SchemeNeed | "All">("All");
   const [showIntro, setShowIntro] = useState(true);
   const recognitionRef = useRef<RecognitionInstance | null>(null);
 
@@ -422,6 +437,7 @@ export default function Home() {
       setStep((current) => current + 1);
       return;
     }
+    setSelectedNeed("All");
     setShowResults(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -499,6 +515,10 @@ export default function Home() {
   if (showResults) {
     const income = Number(values.annualIncome || 0);
     const matches = getSchemeMatches(values);
+    const availableNeeds = Array.from(new Set(matches.map((match) => match.need)));
+    const visibleMatches = selectedNeed === "All"
+      ? matches
+      : matches.filter((match) => match.need === selectedNeed);
     const profileLine = [values.age && `${values.age} years`, values.state, values.employmentStatus].filter(Boolean).join(" · ");
     return (
       <main className="app-shell results-shell">
@@ -516,7 +536,7 @@ export default function Home() {
           <div className="profile-summary">
             <span>Profile</span>
             <strong>{profileLine || "Your details"}</strong>
-            <button type="button" onClick={() => setShowResults(false)}>Edit answers</button>
+            <button type="button" onClick={() => { setSelectedNeed("All"); setShowResults(false); }}>Edit answers</button>
           </div>
         </section>
         <section className="results-content" aria-labelledby="matches-title">
@@ -525,10 +545,17 @@ export default function Home() {
               <p className="eyebrow">Your possible matches</p>
               <h2 id="matches-title">Start with these {income && income <= 250000 ? "high-priority" : "recommended"} schemes</h2>
             </div>
-            <span className="match-count">{matches.length} {matches.length === 1 ? "match" : "matches"}</span>
+            <span className="match-count">{visibleMatches.length} {visibleMatches.length === 1 ? "match" : "matches"}</span>
+          </div>
+          <div className="field-block">
+            <label>What do you need help with today?</label>
+            <div className="option-row" role="group" aria-label="Filter your matched schemes by immediate need">
+              <OptionPill active={selectedNeed === "All"} onClick={() => setSelectedNeed("All")}>All matches</OptionPill>
+              {availableNeeds.map((need) => <OptionPill key={need} active={selectedNeed === need} onClick={() => setSelectedNeed(need)}>{need}</OptionPill>)}
+            </div>
           </div>
           <div className="scheme-list">
-            {matches.map((scheme) => <SchemeResult key={scheme.title} {...scheme} />)}
+            {visibleMatches.map(({ need: _need, ...scheme }) => <SchemeResult key={scheme.title} {...scheme} />)}
           </div>
           <aside className="next-card">
             <div className="next-card-icon"><Icon name="shield" /></div>
