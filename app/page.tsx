@@ -15,6 +15,13 @@ type FormValues = {
   disability: string;
 };
 
+type SchemeMatch = {
+  badge: string;
+  title: string;
+  description: string;
+  accent: "green" | "saffron" | "blue";
+};
+
 type FieldName = keyof FormValues;
 
 type RecognitionEvent = {
@@ -169,6 +176,113 @@ function formatIncome(value: string) {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function getSchemeMatches(profile: FormValues): SchemeMatch[] {
+  const age = Number(profile.age);
+  const income = Number(profile.annualIncome);
+  const profession = profile.profession.toLowerCase();
+  const isStudent = profile.employmentStatus === "Student";
+  const isBusinessOwner = profile.employmentStatus === "Business" || profile.employmentStatus === "Self-employed";
+  const isFarmer = /\bfarm(?:er|ing)?\b/.test(profession);
+  const isStreetVendor = /\b(?:street )?vendor|hawker\b/.test(profession);
+  const isReservedCategory = ["SC", "ST", "OBC"].includes(profile.caste);
+  const isPriorityGroup = isReservedCategory || profile.communityStatus === "Minority" || profile.disability === "Yes";
+  const candidates: Omit<SchemeMatch, "accent">[] = [];
+
+  if (isStudent) {
+    candidates.push({
+      badge: isPriorityGroup ? "Strong profile match" : "Student match",
+      title: "National Scholarship Portal opportunities",
+      description: "You selected Student. Explore scholarships that match your course, marks, income, category and state; final eligibility is verified by the institution.",
+    });
+  }
+
+  if (profile.state === "Delhi" && isStudent && isPriorityGroup && income > 0 && income < 500000) {
+    candidates.push({
+      badge: "Delhi profile match",
+      title: "Education Loan Scheme — Delhi",
+      description: "Your Delhi, student, income and target-group details may fit this education-loan option. Confirm residence, admission and recognised-institute requirements.",
+    });
+  }
+
+  if (isFarmer) {
+    candidates.push({
+      badge: "Farmer profile match",
+      title: "PM-KISAN",
+      description: "You selected a farming profession. Check your land records and the scheme’s exclusion conditions before applying.",
+    });
+
+    if (age >= 18 && age <= 40) {
+      candidates.push({
+        badge: "Farmer pension match",
+        title: "Pradhan Mantri Kisan Maandhan Yojana",
+        description: "This pension option may suit farmers aged 18–40. It requires small or marginal cultivable landholding and other verification.",
+      });
+    }
+  }
+
+  if (isStreetVendor) {
+    candidates.push({
+      badge: "Vendor profile match",
+      title: "PM SVANidhi",
+      description: "You selected a vendor profession. Check whether your vending activity and local-body certificate meet the current scheme requirements.",
+    });
+  }
+
+  if (isBusinessOwner) {
+    candidates.push({
+      badge: "Business profile match",
+      title: "Pradhan Mantri MUDRA Yojana",
+      description: "You selected business or self-employment. This may support eligible non-corporate micro-enterprise activities through participating lenders.",
+    });
+
+    if (profile.gender === "Female" || profile.caste === "SC" || profile.caste === "ST") {
+      candidates.push({
+        badge: "Entrepreneur profile match",
+        title: "Stand-Up India",
+        description: "Women and SC/ST entrepreneurs may explore this option for eligible greenfield enterprises. Bank and business-plan checks apply.",
+      });
+    }
+  }
+
+  if (profile.disability === "Yes") {
+    candidates.push({
+      badge: "Disability support match",
+      title: "ADIP Assistance Scheme",
+      description: "You reported a disability. Explore assistance for aids and appliances; a disability certificate and other scheme conditions are checked at application time.",
+    });
+  }
+
+  if (age >= 60 && income > 0 && income <= 250000) {
+    candidates.push({
+      badge: "Senior citizen match",
+      title: "National Social Assistance Programme",
+      description: "Your age and income suggest checking old-age pension support. State and household eligibility verification is required.",
+    });
+  }
+
+  if (profile.earningStatus === "Non-earning" && age >= 15 && age <= 45) {
+    candidates.push({
+      badge: "Skills profile match",
+      title: "Skill India / PMKVY",
+      description: "You selected non-earning status. Explore job-linked training opportunities based on your age, location and available courses.",
+    });
+  }
+
+  if (!candidates.length) {
+    candidates.push({
+      badge: "Explore",
+      title: "PM Jan Dhan Yojana",
+      description: "Explore basic financial-inclusion support and check with a participating bank for current account and eligibility requirements.",
+    });
+  }
+
+  const accents: SchemeMatch["accent"][] = ["green", "saffron", "blue"];
+  return candidates.slice(0, 4).map((candidate, index) => ({
+    ...candidate,
+    accent: accents[index % accents.length],
+  }));
 }
 
 function spokenIncome(text: string) {
@@ -384,6 +498,7 @@ export default function Home() {
 
   if (showResults) {
     const income = Number(values.annualIncome || 0);
+    const matches = getSchemeMatches(values);
     const profileLine = [values.age && `${values.age} years`, values.state, values.employmentStatus].filter(Boolean).join(" · ");
     return (
       <main className="app-shell results-shell">
@@ -410,12 +525,10 @@ export default function Home() {
               <p className="eyebrow">Your possible matches</p>
               <h2 id="matches-title">Start with these {income && income <= 250000 ? "high-priority" : "recommended"} schemes</h2>
             </div>
-            <span className="match-count">3 matches</span>
+            <span className="match-count">{matches.length} {matches.length === 1 ? "match" : "matches"}</span>
           </div>
           <div className="scheme-list">
-            <SchemeResult badge="Good match" accent="green" title="Ayushman Bharat PM-JAY" description="Health coverage support for eligible families. Check your household record and carry an Aadhaar card." />
-            <SchemeResult badge="Explore" accent="saffron" title={values.employmentStatus === "Student" ? "National Scholarship Portal" : "PM Jan Dhan Yojana"} description={values.employmentStatus === "Student" ? "Scholarships for eligible students across school and higher education." : "A basic bank account with access to financial services and insurance benefits."} />
-            <SchemeResult badge="Explore" accent="blue" title={values.profession.toLowerCase().includes("farmer") ? "PM-KISAN" : "Skill India / PMKVY"} description={values.profession.toLowerCase().includes("farmer") ? "Income support for eligible landholding farmer families." : "Free or subsidised training opportunities to build job-ready skills."} />
+            {matches.map((scheme) => <SchemeResult key={scheme.title} {...scheme} />)}
           </div>
           <aside className="next-card">
             <div className="next-card-icon"><Icon name="shield" /></div>
